@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>เครื่องมือช่วยเขียนวัตถุประสงค์การเรียนรู้ (CBL)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+
+    // 🚨 คำเตือน: อย่าเปิดเผย API Key ในโค้ดฝั่ง Client-side ในโปรเจกต์จริง
+    // โปรด Revoke Key นี้และสร้างใหม่ แล้วเก็บไว้ในที่ปลอดภัย (เช่น Backend Server)
+    const API_KEY = "AIzaSyCd7RZ4Bxo-3Lf0VhV4lRzTBC6ujm1HJnw";
+    const SYSTEM_URL = "https://raw.githubusercontent.com/chacharin/CBL-objective-generator/refs/heads/main/source.txt";
+
+    const STRAND_MAP = {
+      "ภาษาไทย": ["การอ่าน", "การเขียน", "การฟัง การดู และการพูด", "หลักการใช้ภาษาไทย", "วรรณคดีและวรรณกรรม"],
+      "คณิตศาสตร์": ["จำนวนและการดำเนินการ", "การวัด", "เรขาคณิต", "พีชคณิต", "การวิเคราะห์ข้อมูลและความน่าจะเป็น", "ทักษะและกระบวนการทางคณิตศาสตร์"],
+      "วิทยาศาสตร์": ["สิ่งมีชีวิตกับกระบวนการดำรงชีวิต", "ชีวิตกับสิ่งแวดล้อม", "สารและสมบัติของสาร", "แรงและการเคลื่อนที่", "พลังงาน", "กระบวนการเปลี่ยนแปลงของโลก", "ดาราศาสตร์และอวกาศ", "ธรรมชาติของวิทยาศาสตร์และเทคโนโลยี"],
+      "สังคมศึกษา ศาสนา และวัฒนธรรม": ["ศาสนา ศีลธรรม จริยธรรม", "หน้าที่พลเมือง วัฒนธรรม และการดำเนินชีวิตในสังคม", "เศรษฐศาสตร์", "ประวัติศาสตร์", "ภูมิศาสตร์"],
+      "สุขศึกษาและพลศึกษา": ["การเจริญเติบโตและพัฒนาการของมนุษย์", "ชีวิตและครอบครัว", "การเคลื่อนไหว การออกกำลังกาย เกม กีฬา", "การสร้างเสริมสุขภาพ", "ความปลอดภัยในชีวิต"],
+      "ศิลปะ": ["ทัศนศิลป์", "ดนตรี", "นาฏศิลป์"],
+      "การงานอาชีพและเทคโนโลยี": ["การดำรงชีวิตและครอบครัว", "การออกแบบและเทคโนโลยี", "เทคโนโลยีสารสนเทศและการสื่อสาร", "การอาชีพ"],
+      "ภาษาต่างประเทศ": ["ภาษาเพื่อการสื่อสาร", "ภาษาและวัฒนธรรม", "ภาษากับกลุ่มสาระอื่น", "ภาษากับชุมชนและโลก"]
+    };
+
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    let chat;
+    let systemInstruction = "";
+
+    async function fetchInstruction() {
+      try {
+        const res = await fetch(SYSTEM_URL);
+        if (!res.ok) throw new Error("fetch failed");
+        systemInstruction = await res.text();
+        console.log("✅ System instruction loaded");
+      } catch (err) {
+        console.error("❌ Cannot fetch system instruction:", err);
+        alert("ไม่สามารถโหลดคำสั่งระบบได้ โปรดตรวจสอบ Console");
+      }
+    }
+
+    async function setupChat() {
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // ใช้ชื่อโมเดลที่ถูกต้อง
+      chat = await model.startChat({ history: [] });
+      console.log("✅ Gemini Chat initialized");
+    }
+
+    function updateStrandOptions() {
+      const subject = document.getElementById("subject").value;
+      const container = document.getElementById("strandContainer");
+      container.innerHTML = ""; // ล้างสาระย่อยเก่าออกทั้งหมด
+      if (subject && STRAND_MAP[subject]) {
+          addStrand(); // เพิ่ม dropdown ของสาระย่อยอันแรกโดยอัตโนมัติ
+      }
+    }
+
+    function addStrand() {
+      const subject = document.getElementById("subject").value;
+      const strands = STRAND_MAP[subject] || [];
+      const container = document.getElementById("strandContainer");
+
+      const div = document.createElement("div");
+      div.className = "flex items-center space-x-2";
+
+      const select = document.createElement("select");
+      select.className = "strand w-full border p-2 rounded";
+      if (strands.length > 0) {
+        for (const s of strands) {
+          const option = document.createElement("option");
+          option.value = s;
+          option.textContent = s;
+          select.appendChild(option);
+        }
+      } else {
+        const option = document.createElement("option");
+        option.textContent = "ไม่มีสาระย่อยสำหรับกลุ่มสาระนี้";
+        option.disabled = true;
+        select.appendChild(option);
+      }
+
+      const remove = document.createElement("button");
+      remove.textContent = "ลบ";
+      remove.type = "button";
+      remove.className = "text-red-600 hover:underline flex-shrink-0";
+      remove.onclick = () => div.remove();
+
+      div.appendChild(select);
+      div.appendChild(remove);
+      container.appendChild(div);
+    }
+
+    function copyToClipboard(id) {
+      const text = document.getElementById(id).value;
+      navigator.clipboard.writeText(text).then(() => {
+        alert("คัดลอกสำเร็จ!");
+      }, () => {
+        alert("คัดลอกไม่สำเร็จ");
+      });
+    }
+
+    async function sendPrompt(e) {
+      e.preventDefault();
+      const subject = document.getElementById("subject").value;
+      const grade = document.getElementById("grade").value;
+      const topic = document.getElementById("topic").value;
+      const strands = Array.from(document.querySelectorAll(".strand")).map(s => s.value);
+
+      if (!subject || !grade || !topic || strands.length === 0) {
+        alert("กรุณากรอกข้อมูลให้ครบทุกช่อง");
+        return;
+      }
+
+      const loading = document.getElementById("loadingIndicator");
+      const submitBtn = document.querySelector('button[type="submit"]');
+      const outputTextarea = document.getElementById("learningOutcome");
+      
+      loading.classList.remove("hidden");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "กำลังสร้าง...";
+      outputTextarea.value = ""; // เคลียร์ผลลัพธ์เก่า
+
+      const input = `กลุ่มสาระ: ${subject}\nระดับชั้น: ${grade}\nชื่อหัวข้อ: ${topic}\nสาระย่อย: ${strands.join(", ")}\n\n${systemInstruction}`;
+
+      try {
+        const result = await chat.sendMessage(input);
+        const text = (await result.response).text();
+        
+        // ⭐ [CHANGE] แสดงผลลัพธ์ทั้งหมดในช่องเดียว
+        outputTextarea.value = text;
+
+      } catch (err) {
+        console.error("❌ Error:", err);
+        alert("เกิดข้อผิดพลาดในการสร้างวัตถุประสงค์ โปรดตรวจสอบ Console สำหรับข้อมูลเพิ่มเติม");
+        outputTextarea.value = "เกิดข้อผิดพลาด: " + err.message;
+      } finally {
+        loading.classList.add("hidden");
+        submitBtn.disabled = false;
+        // ⭐ [CHANGE] เปลี่ยนข้อความปุ่มกลับเป็นแบบใหม่
+        submitBtn.textContent = "สร้างวัตถุประสงค์การเรียนรู้";
+      }
+    }
+
+    window.onload = async () => {
+      document.getElementById("loadingIndicator").classList.remove('hidden');
+      document.getElementById("loadingIndicator").textContent = "⏳ กำลังโหลดโมเดล...";
+
+      await fetchInstruction();
+      await setupChat();
+
+      document.getElementById("loadingIndicator").classList.add('hidden');
+      document.getElementById("loadingIndicator").textContent = "⏳ กำลังสร้างวัตถุประสงค์...";
+
+      const subjectDropdown = document.getElementById("subject");
+      Object.keys(STRAND_MAP).forEach(key => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = key;
+        subjectDropdown.appendChild(option);
+      });
+
+      subjectDropdown.onchange = updateStrandOptions;
+      document.getElementById("addStrandBtn").onclick = addStrand;
+      document.getElementById("objectiveForm").onsubmit = sendPrompt;
+
+      // ⭐ [CHANGE] อัปเดตปุ่มคัดลอกให้ตรงกับ textarea ใหม่
+      document.getElementById('copyOutcomeBtn').onclick = () => copyToClipboard('learningOutcome');
+    };
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+  <main class="max-w-5xl mx-auto px-4 py-8">
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-slate-900">เครื่องมือช่วยเขียนวัตถุประสงค์การเรียนรู้</h1>
+        <p class="text-slate-600 mt-1">สร้างวัตถุประสงค์การเรียนรู้ตามฐานสมรรถนะ (Competency-Based Learning)</p>
+    </div>
+    
+    <form id="objectiveForm" class="space-y-6 bg-white p-6 rounded-lg shadow-md border border-slate-200">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="subject" class="block font-medium text-slate-700 mb-1">กลุ่มสาระการเรียนรู้</label>
+          <select id="subject" required class="w-full rounded-md border-slate-300 shadow-sm p-2 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+            <option value="">— เลือกกลุ่มสาระฯ —</option>
+          </select>
+        </div>
+        <div>
+          <label for="grade" class="block font-medium text-slate-700 mb-1">ระดับชั้น</label>
+          <select id="grade" required class="w-full rounded-md border-slate-300 shadow-sm p-2 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+            <option value="">— เลือกระดับชั้น —</option>
+            <optgroup label="ประถมศึกษา">
+              <option>ป.1</option><option>ป.2</option><option>ป.3</option><option>ป.4</option><option>ป.5</option><option>ป.6</option>
+            </optgroup>
+            <optgroup label="มัธยมศึกษาตอนต้น">
+              <option>ม.1</option><option>ม.2</option><option>ม.3</option>
+            </optgroup>
+             <optgroup label="มัธยมศึกษาตอนปลาย">
+              <option>ม.4</option><option>ม.5</option><option>ม.6</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label for="topic" class="block font-medium text-slate-700 mb-1">ชื่อหัวข้อ / หน่วยการเรียนรู้</label>
+        <input id="topic" type="text" required class="w-full rounded-md border-slate-300 shadow-sm p-2 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" placeholder="เช่น ระบบนิเวศ, การอ่านจับใจความ, สมัยสุโขทัย" />
+      </div>
+      <div>
+        <label class="block font-medium text-slate-700 mb-2">เลือกสาระย่อยที่เกี่ยวข้อง (เลือกได้มากกว่า 1)</label>
+        <div id="strandContainer" class="space-y-2"></div>
+        <button type="button" id="addStrandBtn" class="mt-2 text-sm text-blue-600 hover:text-blue-800 font-semibold">+ เพิ่มสาระย่อย</button>
+      </div>
+      <div class="pt-2 border-t border-slate-200">
+        <!-- ⭐ [CHANGE] เปลี่ยนข้อความบนปุ่ม -->
+        <button type="submit" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-md shadow-sm transition-colors duration-200 disabled:bg-slate-400">สร้างวัตถุประสงค์การเรียนรู้</button>
+      </div>
+      <div id="loadingIndicator" class="hidden text-center text-blue-700 font-medium">⏳ กำลังสร้างวัตถุประสงค์...</div>
+    </form>
+
+    <section class="mt-10">
+      <h2 class="text-2xl font-bold mb-4 text-slate-900">ผลลัพธ์</h2>
+      <!-- ⭐ [CHANGE] รวมช่องแสดงผลลัพธ์เหลือช่องเดียว -->
+      <div class="bg-white p-4 rounded-lg shadow-md border border-slate-200">
+          <h3 class="font-semibold text-slate-800 mb-2">ผลลัพธ์การเรียนรู้</h3>
+          <textarea id="learningOutcome" class="w-full h-80 p-2.5 rounded-md border-slate-300 bg-slate-50 text-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50" placeholder="ผลลัพธ์ทั้งหมดจะปรากฏที่นี่..."></textarea>
+          <button id="copyOutcomeBtn" class="mt-2 text-sm text-green-700 hover:text-green-900 font-semibold">📋 คัดลอก</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
